@@ -6,6 +6,8 @@ metadata:
   name: build-fedora-package
   labels:
     build.appstudio.redhat.com/pipeline: "build-rpm-package"
+    pipelines.appstudio.openshift.io/type: build
+    appstudio.openshift.io/application: rpms
 spec:
   finally:
     - name: show-summary
@@ -15,7 +17,7 @@ spec:
         - name: git-url
           value: $(tasks.clone-repository.results.url)?rev=$(tasks.clone-repository.results.commit)
         - name: image-url
-          value: "todo - drop"
+          value: $(tasks.upload-to-quay.results.IMAGE_URL)
       taskRef:
         params:
           - name: name
@@ -25,19 +27,30 @@ spec:
           - name: kind
             value: task
         resolver: bundles
-      workspaces:
-        - name: workspace
-          workspace: workspace
+    - name: show-sbom
+      params:
+      - name: IMAGE_URL
+        value: $(tasks.upload-to-quay.results.IMAGE_URL)
+      taskRef:
+        params:
+        - name: name
+          value: show-sbom
+        - name: bundle
+          value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:7f8b5499a21de9aca718d0cf2e170949af6b30cacf882d64983471a2c673b1da
+        - name: kind
+          value: task
+        resolver: bundles
   params:
     - name: package-name
-      value: package-name
+      description: The name of the package we want to build
     - description: Source Repository URL
       name: git-url
       type: string
-      default: '{{source_url}}'
-    - default: '{{revision}}'
-      description: Revision of the Source Repository
+    - description: Revision of the Source Repository
       name: revision
+      type: string
+    - description: The branch name we build against/from
+      name: target-branch
       type: string
     - default: "false"
       description: Force rebuild image
@@ -72,6 +85,24 @@ spec:
         during build
       name: build-args-file
       type: string
+    - name: self-ref-url
+      description: |
+        Testing-only.  This must be filled as parameter in tests so we can point
+        at the Tasks for the same git-revision.
+      type: string
+      default: "https://github.com/ralphbean/libecpg.git"
+    - name: self-ref-revision
+      description: |
+        Testing-only.  This must be filled as parameter in tests so we can point
+        at the Tasks for the same git-revision.  For production it defaults to "main".
+      type: string
+      default: "main"
+    - name: test-suffix
+      description: |
+        Testing-only.  In some places we don't want to mix-up "real" component builds
+        with "testing" component builds.  If we are testing, set this to some value.
+      type: string
+      default: ""
   results:
     - description: ""
       name: CHAINS-GIT_URL
@@ -79,7 +110,28 @@ spec:
     - description: ""
       name: CHAINS-GIT_COMMIT
       value: $(tasks.clone-repository.results.commit)
+    - description: ""
+      name: IMAGE_URL
+      value: $(tasks.upload-to-quay.results.IMAGE_URL)
+    - description: ""
+      name: IMAGE_DIGEST
+      value: $(tasks.upload-to-quay.results.IMAGE_DIGEST)
+    - name: SBOM_BLOB_URL
+      description: SPDX SBOM
+      value: $(tasks.upload-sbom.results.SBOM_BLOB_URL)
   tasks:
+    - name: store-start-time
+      taskSpec:
+        results:
+          - name: timestamp
+            description: Timestamp for pipeline start
+        steps:
+          - name: store-timestamp
+            image: registry.access.redhat.com/ubi9
+            script: |
+              #!/usr/bin/env bash
+              set -e
+              date "+%s" | tr -d '\n' | tee $(results.timestamp.path)
     - name: init
       params:
         - name: rebuild
@@ -88,6 +140,8 @@ spec:
           value: $(params.skip-checks)
         - name: image-url
           value: todo - drop
+      runAfter:
+        - store-start-time
       taskRef:
         params:
           - name: name
@@ -112,7 +166,7 @@ spec:
           - name: name
             value: git-clone
           - name: bundle
-            value: quay.io/redhat-appstudio-tekton-catalog/task-git-clone:0.1@sha256:e1f7a275d722bc3147a65fcd772b16b54ccb6ce81c76939bc1052b2438dd2ccf
+            value: quay.io/redhat-appstudio-tekton-catalog/task-git-clone:0.1@sha256:9e6c4db5a666ea0e1e747e03d63f46e5617a6b9852c26871f9d50891d778dfa2
           - name: kind
             value: task
         resolver: bundles
@@ -134,10 +188,17 @@ spec:
       workspaces:
         - name: sources
           workspace: workspace
+      params:
+        - name: package-name
+          value: $(params.package-name)
     - name: rpmbuild-x86-64
       runAfter:
         - get-rpm-sources
       params:
+        - name: package-name
+          value: $(params.package-name)
+        - name: target-branch
+          value: $(params.target-branch)
         - name: PLATFORM
           value: linux/amd64
       workspaces:
@@ -149,6 +210,10 @@ spec:
       runAfter:
         - get-rpm-sources
       params:
+        - name: package-name
+          value: $(params.package-name)
+        - name: target-branch
+          value: $(params.target-branch)
         - name: PLATFORM
           value: linux/arm64
       workspaces:
@@ -160,6 +225,10 @@ spec:
       runAfter:
         - get-rpm-sources
       params:
+        - name: package-name
+          value: $(params.package-name)
+        - name: target-branch
+          value: $(params.target-branch)
         - name: PLATFORM
           value: linux/s390x
       workspaces:
@@ -171,6 +240,10 @@ spec:
       runAfter:
         - get-rpm-sources
       params:
+        - name: package-name
+          value: $(params.package-name)
+        - name: target-branch
+          value: $(params.target-branch)
         - name: PLATFORM
           value: linux/ppc64le
       workspaces:
@@ -178,9 +251,40 @@ spec:
           workspace: workspace
       taskRef:
         name: rpmbuild
+    - name: upload-to-quay
+      params:
+        - name: git-url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.revision)
+        - name: package-name
+          value: $(params.package-name)
+        - name: start-time
+          value: $(tasks.store-start-time.results.timestamp)
+        - name: pipelinerun-id
+          value: $(context.pipelineRun.namespace)/$(context.pipelineRun.name)
+      workspaces:
+        - name: sources
+          workspace: workspace
+      runAfter:
+        - rpmbuild-s390x
+        - rpmbuild-x86-64
+        - rpmbuild-aarch64
+        - rpmbuild-ppc64le
+      taskRef:
+        name: import-to-quay
+    - name: upload-sbom
+      params:
+        - name: IMAGE_URL
+          value: $(tasks.upload-to-quay.results.IMAGE_URL)
+      workspaces:
+        - name: sources
+          workspace: workspace
+      runAfter:
+        - upload-to-quay
+      taskRef:
+        name: upload-sbom
   workspaces:
     - name: workspace
     - name: git-auth
       optional: true
-  taskRunTemplate: {}
-status: {}

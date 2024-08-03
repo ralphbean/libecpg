@@ -1,0 +1,44 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    tekton.dev/pipelines.minVersion: 0.12.1
+    tekton.dev/tags: rpm-build
+  name: upload-sbom
+spec:
+  description: Upload SBOM to quay
+  params:
+    - name: IMAGE_URL
+      description: Image URL
+      type: string
+  results:
+    - name: SBOM_BLOB_URL
+      description: SPDX SBOM
+      type: string
+  steps:
+    - name: upload-sbom-to-quay
+      image: quay.io/redhat-appstudio/cosign:v2.1.1@sha256:c883d6f8d39148f2cea71bff4622d196d89df3e510f36c140c097b932f0dd5d5
+      args:
+        - attach
+        - sbom
+        - --sbom
+        - results/oras-staging/sbom-spdx.json
+        - --type
+        - spdx
+        - $(params.IMAGE_URL)
+      workingDir: $(workspaces.sources.path)
+    - name: report-sbom-url
+      image: quay.io/konflux-ci/yq:latest@sha256:974dea6375ee9df561ffd3baf994db2b61777a71f3bcf0050c5dca91ac9b3430
+      script: |
+        #!/usr/bin/env bash
+        cd $(workspaces.sources.path)/results/oras-staging
+        set -e
+        IMAGE_URL=$(params.IMAGE_URL)
+        REPO=${IMAGE_URL%:*}
+        echo "Found that ${REPO} is the repository for ${IMAGE_URL}"
+        SBOM_DIGEST=$(sha256sum sbom-spdx.json | awk '{ print $1 }')
+        echo "Found that ${SBOM_DIGEST} is the SBOM digest"
+        echo -n "${REPO}@sha256:${SBOM_DIGEST}" | tee $(results.SBOM_BLOB_URL.path)
+  workspaces:
+    - name: sources

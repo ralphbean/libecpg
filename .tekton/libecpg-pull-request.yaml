@@ -3,7 +3,7 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
-    build.appstudio.openshift.io/repo: https://github.com/ralphbean/libecpg?rev={{revision}}
+    build.appstudio.openshift.io/repo: '{{ source_url }}/-/tree/{{ revision }}'
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
@@ -20,20 +20,23 @@ spec:
   params:
     - name: package-name
       value: libecpg
+    - name: git-url
+      value: "{{ source_url }}"
+    - name: revision
+      value: "{{ revision }}"
+    - name: target-branch
+      value: "{{ target_branch }}"
   pipelineRef:
     name: build-fedora-package
   workspaces:
     - name: workspace
       volumeClaimTemplate:
-        metadata:
-          creationTimestamp: null
         spec:
           accessModes:
             - ReadWriteOnce
           resources:
             requests:
               storage: 1Gi
-        status: {}
     - name: git-auth
       secret:
         secretName: '{{ git_auth_secret }}'

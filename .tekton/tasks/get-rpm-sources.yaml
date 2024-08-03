@@ -8,14 +8,18 @@ metadata:
 spec:
   description: |-
     Download source files referenced by a spec file.
+  params:
+    - description: Package name to clone
+      name: package-name
+      type: string
   steps:
     - name: download
-      image: "quay.io/redhat-user-workloads/rhn-support-praiskup-tenant/\
-              konflux-rpm-prefetch-sources/konflux-rpm-prefetch-sources:\
-              40af1340112df6e3f49e40230f34de7149ce2c59"
+      image: "quay.io/redhat-user-workloads/rhel-on-konflux-tenant/\
+              tooling/get-rpm-sources-container:\
+              7551f7bcb4e2bd22c2042c51fb327a3c06e407bd"
       script: |
         set -x
         cd "$(workspaces.sources.path)/source"
-        copr-distgit-client --forked-from "https://src.fedoraproject.org/rpms/$(params.package-name).git" sources
+        copr-distgit-client --forked-from https://src.fedoraproject.org/git/rpms/$(params.package-name) sources
   workspaces:
     - name: sources

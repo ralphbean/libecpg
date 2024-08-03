@@ -6,21 +6,29 @@ metadata:
     tekton.dev/pipelines.minVersion: 0.12.1
     tekton.dev/tags: rpm-build
   name: rpmbuild
+  labels:
+    build.appstudio.redhat.com/multi-platform-required: "true"
 spec:
   description: |-
     RPM Build task.
+  params:
+    - description: Package name being built
+      name: package-name
+      type: string
+    - description: The platform/architecture we build for
+      name: PLATFORM
+      type: string
+    - description: The branch name we build against/from
+      name: target-branch
+      type: string
   steps:
     - name: mock-build
-      metadata:
-        labels:
-          build.appstudio.redhat.com/multi-platform-required: "true"
       image: "quay.io/redhat-appstudio/multi-platform-runner:\
               01c7670e81d5120347cf0ad13372742489985e5f@sha256:\
               246adeaaba600e207131d63a7f706cffdcdc37d8f600c56187123ec62823ff44"
       script: |
-        #!/usr/bin/env bash
-        set -x
-        ls -lah /ssh
+        #!/bin/bash
+        set -ex
         mkdir -p ~/.ssh
         if [ -e "/ssh/error" ]; then
           #no server could be provisioned
@@ -33,42 +41,46 @@ spec:
           cp /ssh/id_rsa ~/.ssh
         fi
 
-        chroot_name() {
-          local branch={{ target_branch }}
-          local distro=fedora
-          local version=rawhide
-          case $branch in
-            f*)
-              local version=${branch##f}
-              ;;
-          esac
-          local arch=x86_64
-          case $(params.PLATFORM) in
-            *s390x) arch=s390x ;;
-            *ppc64le) arch=ppc64le ;;
-            *arm64) arch=aarch64 ;;
-          esac
-          echo $distro-$version-$arch
-        }
+        arch=x86_64
+        case $(params.PLATFORM) in
+          *s390x) arch=s390x ;;
+          *ppc64le) arch=ppc64le ;;
+          *arm64) arch=aarch64 ;;
+        esac
 
         chmod 0400 ~/.ssh/id_rsa
         export SSH_HOST=$(cat /ssh/host)
-        export BUILD_DIR=$(cat /ssh/user-dir)
+        export HOMEDIR=$(cat /ssh/user-dir)
         export SSH_ARGS="-o StrictHostKeyChecking=no"
         remote_cmd() { ssh $SSH_ARGS "$SSH_HOST" "$@" ; }
         send() { rsync -rva "$1" "$SSH_HOST:$2" ; }
+        receive() { rsync -rva "$SSH_HOST:$1" "$2" ; }
+
+        workdir=$(workspaces.sources.path)
 
         remote_cmd echo "Hello from the other side!"
-        send "$(workspaces.sources.path)/source/" "$BUILD_DIR/source"
+        send "$workdir/source/" "$HOMEDIR/source"
 
-        mock_img=quay.io/praiskup/mock:966775003f2195b6c763a430294b1837ec84ab7c
-        remote_cmd podman run -v "$BUILD_DIR/source:/source" --privileged --rm -ti "$mock_img" \
-            mock -r "$(chroot_name)" --spec /source/$(params.package-name).spec --sources /source
+        remote_cmd mkdir "$HOMEDIR/results"
+
+        mock_img=quay.io/redhat-user-workloads/rhel-on-konflux-team-tenant/tooling/mock-container:6fbbd2c33f2a2ef431d19215742e6e5a11f3b07d
+        remote_cmd podman pull "$mock_img"
+        remote_cmd podman run -v "$HOMEDIR/source:/source" \
+                              -v "$HOMEDIR/results:/results" \
+                              --privileged --rm -ti "$mock_img" \
+            mock -r "$(params.target-branch)-$arch" \
+                --spec /source/$(params.package-name).spec \
+                --sources /source --resultdir /results
+
+        resultdir=$workdir/results/$arch
+        mkdir -p "$resultdir"
+        receive "$HOMEDIR/results/" "$resultdir"
 
       volumeMounts:
         - mountPath: /ssh
           name: ssh
           readOnly: true
+
   volumes:
     - name: ssh
       secret:
