@@ -48,6 +48,13 @@ spec:
           *arm64) arch=aarch64 ;;
         esac
 
+        version=rawhide
+        branch=$(params.target-branch)
+        case $branch in
+          f*) version=${branch##f} ;;
+        esac
+        mockconfig=fedora-$version-$arch
+
         chmod 0400 ~/.ssh/id_rsa
         export SSH_HOST=$(cat /ssh/host)
         export HOMEDIR=$(cat /ssh/user-dir)
@@ -68,7 +75,7 @@ spec:
         remote_cmd podman run -v "$HOMEDIR/source:/source" \
                               -v "$HOMEDIR/results:/results" \
                               --privileged --rm -ti "$mock_img" \
-            mock -r "$(params.target-branch)-$arch" \
+            mock -r "$mockconfig" \
                 --spec /source/$(params.package-name).spec \
                 --sources /source --resultdir /results
 
