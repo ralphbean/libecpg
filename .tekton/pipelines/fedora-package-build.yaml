@@ -221,36 +221,6 @@ spec:
           workspace: workspace
       taskRef:
         name: rpmbuild
-    - name: rpmbuild-s390x
-      runAfter:
-        - get-rpm-sources
-      params:
-        - name: package-name
-          value: $(params.package-name)
-        - name: target-branch
-          value: $(params.target-branch)
-        - name: PLATFORM
-          value: linux/s390x
-      workspaces:
-        - name: sources
-          workspace: workspace
-      taskRef:
-        name: rpmbuild
-    - name: rpmbuild-ppc64le
-      runAfter:
-        - get-rpm-sources
-      params:
-        - name: package-name
-          value: $(params.package-name)
-        - name: target-branch
-          value: $(params.target-branch)
-        - name: PLATFORM
-          value: linux/ppc64le
-      workspaces:
-        - name: sources
-          workspace: workspace
-      taskRef:
-        name: rpmbuild
     - name: upload-to-quay
       params:
         - name: git-url
@@ -267,10 +237,8 @@ spec:
         - name: sources
           workspace: workspace
       runAfter:
-        - rpmbuild-s390x
         - rpmbuild-x86-64
         - rpmbuild-aarch64
-        - rpmbuild-ppc64le
       taskRef:
         name: import-to-quay
     - name: upload-sbom
