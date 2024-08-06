@@ -64,7 +64,7 @@ spec:
         # Get NVR from any SRPM
         SRPM=`find . -name *.src.rpm | head -1`
         NVR=`basename $SRPM .src.rpm`
-        IMAGE_URL="quay.io/redhat-user-workloads/ralphjbean-tenant/rpms/$(params.package-name):$NVR-on$(params.test-suffix)-pr-$(params.revision)"
+        IMAGE_URL="quay.io/redhat-user-workloads/ralph-tenant/rpms/$(params.package-name):$NVR-on$(params.test-suffix)-pr-$(params.revision)"
 
 
         echo "Selecting auth"
