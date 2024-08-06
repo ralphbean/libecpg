@@ -1,0 +1,87 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  annotations:
+    tekton.dev/pipelines.minVersion: 0.12.1
+    tekton.dev/tags: rpm-build
+  name: import-to-quay
+spec:
+  description: Import build into quay
+  params:
+    - description: Source Repository URL
+      name: git-url
+      type: string
+    - name: revision
+      description: Revision of the Source Repository
+      type: string
+    - description: The name of the package we build
+      name: package-name
+      type: string
+    - name: test-suffix
+      type: string
+      description: |
+        Test-only.  If testing the pipeline, we still want to test the upload to
+        quay.io, but we don't want to mix-up with the real "production" uploads.
+      default: ""
+    - name: start-time
+      description: Store pipeline start time
+      default: ""
+      type: string
+    - name: pipelinerun-id
+      description: PipelineRun ID (namespace/name)
+      default: ""
+      type: string
+  results:
+    - name: IMAGE_URL
+      description: Location of build artifact
+    - name: IMAGE_DIGEST
+      description: Build artifact digest
+    - name: NVR
+      description: name-version-release of built package
+  steps:
+    - name: gather-rpms
+      image: quay.io/redhat-user-workloads/rhel-on-konflux-tenant/tooling/gather-results-container:latest@sha256:f3012c6f2b88db9c1d0f06a3c58f554d46fb412fbb504a09c62bf791baedd00d
+      script: |
+        #!/usr/bin/env bash
+        set -e
+        cd $(workspaces.sources.path)/results
+        /usr/bin/gather-rpms.py \
+            --source-url git+$(params.git-url)#$(params.revision) \
+            --start-time $(params.start-time) \
+            --end-time `date "+%s"` \
+            --pipeline-id "$(params.pipelinerun-id)"
+        echo "Gathered `ls oras-staging | wc -l` files for upload"
+
+    - name: push-to-quay-select-auth
+      image: quay.io/konflux-ci/oras:latest@sha256:1619b84cea3777387f643d7a1ecde98dd10904439f31607e66530cd2299c7b91
+      script: |
+        #!/usr/bin/env bash
+        set -e
+
+        cd $(workspaces.sources.path)/results
+
+        # Get NVR from any SRPM
+        SRPM=`find . -name *.src.rpm | head -1`
+        NVR=`basename $SRPM .src.rpm`
+        IMAGE_URL="quay.io/konflux-fedora/ralph-tenant/rpms/$(params.package-name):$NVR-on$(params.test-suffix)-pr-$(params.revision)"
+
+
+        echo "Selecting auth"
+        select-oci-auth $IMAGE_URL > $HOME/auth.json
+
+        echo "Pushing to: $IMAGE_URL"
+        cd oras-staging
+        # TODO: rewrite to push/attach + xargs for bigger builds (texlive has ~580 rpms)
+        oras push \
+             --registry-config "$HOME/auth.json" \
+             --artifact-type application/vnd.rpm.build.v0 \
+             --annotation quay.expires-after=14d \
+             $IMAGE_URL \
+             `cat ../oras-push-list.txt` | tee ../oras.log
+
+        grep "Digest:" ../oras.log | awk '{print $2}' | tr -d '\n' > $(results.IMAGE_DIGEST.path)
+        echo -n $IMAGE_URL > $(results.IMAGE_URL.path)
+        echo -n $NVR > $(results.NVR.path)
+  workspaces:
+    - name: sources
