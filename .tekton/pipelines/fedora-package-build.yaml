@@ -23,7 +23,7 @@ spec:
           - name: name
             value: summary
           - name: bundle
-            value: quay.io/redhat-appstudio-tekton-catalog/task-summary:0.2@sha256:abdf426424f1331c27be80ed98a0fbcefb8422767d1724308b9d57b37f977155
+            value: quay.io/konflux-ci/tekton-catalog/task-summary:0.2@sha256:e1b8e42962b0c6d9ebe95f3709c34ae5e1569b73941a79654248e0af55eb3ff9
           - name: kind
             value: task
         resolver: bundles
@@ -147,7 +147,7 @@ spec:
           - name: name
             value: init
           - name: bundle
-            value: quay.io/redhat-appstudio-tekton-catalog/task-init:0.2@sha256:596b7c11572bb94eb67d9ffb4375068426e2a8249ff2792ce04ad2a4bc593a63
+            value: quay.io/konflux-ci/tekton-catalog/task-init:0.2@sha256:4f660cb54aa6b125a799d8999ec293a5e783da8c3b4c2d6246e78c0d08b6a56b
           - name: kind
             value: task
         resolver: bundles
@@ -166,7 +166,7 @@ spec:
           - name: name
             value: git-clone
           - name: bundle
-            value: quay.io/redhat-appstudio-tekton-catalog/task-git-clone:0.1@sha256:9e6c4db5a666ea0e1e747e03d63f46e5617a6b9852c26871f9d50891d778dfa2
+            value: quay.io/konflux-ci/tekton-catalog/task-git-clone:0.1@sha256:fedaacbf05ff7b2cdd36bff6cb1f103755cb5dc0b4adc0540136d3606ade18a5
           - name: kind
             value: task
         resolver: bundles
