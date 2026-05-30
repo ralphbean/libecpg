@@ -29,7 +29,7 @@ spec:
         - $(params.IMAGE_URL)
       workingDir: $(workspaces.sources.path)
     - name: report-sbom-url
-      image: quay.io/konflux-ci/yq:latest@sha256:974dea6375ee9df561ffd3baf994db2b61777a71f3bcf0050c5dca91ac9b3430
+      image: quay.io/konflux-ci/yq:latest@sha256:5da0f38c2ed0ad664bec879f8628badbea79bb960b5e1901e5f86c3d4d273032
       script: |
         #!/usr/bin/env bash
         cd $(workspaces.sources.path)/results/oras-staging
